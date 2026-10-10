@@ -5,10 +5,10 @@ pipeline {
         stage('Preparation') {
             steps {
                 sh '''
-                    # Stop en verwijder eerdere containers als ze bestaan
-                    docker stop todoapp todoappdb || true
-                    docker rm todoapp todoappdb || true
-                    # Zorg voor een gedeeld netwerk zodat app en db elkaar vinden
+                    # Stop en verwijder oude containers
+                    docker stop todoapp todoappdb samplerunning || true
+                    docker rm todoapp todoappdb samplerunning || true
+                    # Zorg voor een gedeeld netwerk
                     docker network create todo-net || true
                 '''
             }
@@ -17,7 +17,6 @@ pipeline {
         stage('Start Database') {
             steps {
                 sh '''
-                    # Start MariaDB met dezelfde variabelen als in docker-compose.yml
                     docker run -d \
                       --name todoappdb \
                       --network todo-net \
@@ -35,14 +34,13 @@ pipeline {
         stage('Build & Run App') {
             steps {
                 sh '''
-                    # Bouw de .NET image aan de hand van de Dockerfile
                     docker build -t todoapp:latest ./TodoApp
 
-                    # Start de todoapp op poort 5050 verbonden met hetzelfde netwerk
+                    # Gebruik poort 5051 om poortconflicten te vermijden
                     docker run -d \
                       --name todoapp \
                       --network todo-net \
-                      -p 5050:8080 \
+                      -p 5051:8080 \
                       -e ConnectionStrings__TodoDb="Server=todoappdb;Port=3306;Database=todo_db;User=todo_usr;Password=letmeinplz;" \
                       -e ASPNETCORE_ENVIRONMENT=Development \
                       todoapp:latest
@@ -58,8 +56,8 @@ pipeline {
 
         stage('Test') {
             steps {
-                // Voer de acceptance test uit
-                sh 'curl -s -I http://172.16.0.10:5050/ | grep "HTTP"'
+                // Test op poort 5051
+                sh 'curl -s -I http://172.16.0.10:5051/ | grep "HTTP"'
             }
         }
     }
