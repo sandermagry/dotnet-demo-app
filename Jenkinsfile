@@ -5,10 +5,8 @@ pipeline {
         stage('Preparation') {
             steps {
                 sh '''
-                    # Stop en verwijder oude containers
                     docker stop todoapp todoappdb samplerunning || true
                     docker rm todoapp todoappdb samplerunning || true
-                    # Zorg voor een gedeeld netwerk
                     docker network create todo-net || true
                 '''
             }
@@ -24,9 +22,13 @@ pipeline {
                       -e MARIADB_DATABASE=todo_db \
                       -e MARIADB_USER=todo_usr \
                       -e MARIADB_PASSWORD=letmeinplz \
-                      -v mariadb-data:/var/lib/mysql \
-                      -v "$PWD/TodoApp/schema.sql":/docker-entrypoint-initdb.d/schema.sql:ro \
                       mariadb:11
+
+                    # Wacht even tot MariaDB gereed is om verbindingen te accepteren
+                    sleep 10
+
+                    # Laad schema.sql in via docker exec
+                    docker exec -i todoappdb mariadb -u todo_usr -pletmeinplz todo_db < ./TodoApp/schema.sql
                 '''
             }
         }
@@ -36,7 +38,6 @@ pipeline {
                 sh '''
                     docker build -t todoapp:latest ./TodoApp
 
-                    # Gebruik poort 5051 om poortconflicten te vermijden
                     docker run -d \
                       --name todoapp \
                       --network todo-net \
@@ -50,13 +51,12 @@ pipeline {
 
         stage('Wait for App') {
             steps {
-                sh 'sleep 15'
+                sh 'sleep 10'
             }
         }
 
         stage('Test') {
             steps {
-                // Test op poort 5051
                 sh 'curl -s -I http://172.16.0.10:5051/ | grep "HTTP"'
             }
         }
